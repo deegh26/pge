@@ -8,17 +8,27 @@
     <style>
         body { font-family: 'Segoe UI', sans-serif; margin: 20px; background-color: #f0f2f5; color: #333; }
         .container { max-width: 1200px; margin: auto; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
-        h2, h3 { color: #2c3e50; margin-top: 0; }
+        
+        /* Tabs */
+        .tabs { display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 2px solid #ddd; }
+        .tab { padding: 10px 20px; cursor: pointer; border: 1px solid transparent; border-bottom: none; border-radius: 8px 8px 0 0; background: #eee; font-weight: bold; }
+        .tab.active { background: white; border-color: #ddd; margin-bottom: -2px; color: #007bff; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
         .form-group { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin-bottom: 25px; padding: 20px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; }
         label { font-size: 0.8rem; font-weight: bold; color: #555; }
-        input, button { padding: 10px; border: 1px solid #ccc; border-radius: 4px; width: 100%; box-sizing: border-box; }
+        input, select, button { padding: 10px; border: 1px solid #ccc; border-radius: 4px; width: 100%; box-sizing: border-box; }
         button { background-color: #007bff; color: white; cursor: pointer; border: none; font-weight: bold; }
         .btn-edit { background-color: #f39c12; margin-right: 5px; width: auto; padding: 5px 10px; }
         .btn-del { background-color: #e74c3c; width: auto; padding: 5px 10px; }
-        .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 25px; margin-top: 20px; }
-        .chart-card { background: #fff; padding: 15px; border: 1px solid #eee; border-radius: 8px; min-height: 300px; }
-        .table-container { margin-top: 30px; overflow-x: auto; }
-        table { width: 100%; border-collapse: collapse; background: white; }
+        
+        .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 25px; }
+        .chart-card { background: #fff; padding: 15px; border: 1px solid #eee; border-radius: 8px; min-height: 350px; position: relative; }
+        .controls { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .controls select { width: auto; padding: 5px; font-size: 0.8rem; }
+        
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
         th, td { padding: 12px; border: 1px solid #ddd; text-align: left; font-size: 0.9rem; }
         th { background: #f4f4f4; }
         @media (max-width: 800px) { .charts-grid { grid-template-columns: 1fr; } }
@@ -38,24 +48,43 @@
         <div style="align-self: end;"><button onclick="saveData()" id="saveBtn">Add Data</button></div>
     </div>
 
-    <div class="charts-grid">
-        <div class="chart-card"><h3>Monthly Trend ($)</h3><canvas id="momChart"></canvas></div>
-        <div class="chart-card"><h3>kWh Consumption</h3><canvas id="kwhChart"></canvas></div>
-        <div class="chart-card"><h3>Year-over-Year Comparison</h3><canvas id="yoyChart"></canvas></div>
-        <div class="chart-card"><h3>YoY Savings (%)</h3><canvas id="savingsChart"></canvas></div>
+    <div class="tabs">
+        <div class="tab active" onclick="switchTab('dashboard')">Dashboard</div>
+        <div class="tab" onclick="switchTab('history')">Historical Data</div>
     </div>
 
-    <div class="table-container">
-        <h3>Historical Logs</h3>
-        <table id="dataTable">
-            <thead><tr><th>Month</th><th>kWh</th><th>Elec $</th><th>Gas $</th><th>Total $</th><th>Actions</th></tr></thead>
-            <tbody id="tableBody"></tbody>
-        </table>
+    <div id="dashboard" class="tab-content active">
+        <div class="charts-grid">
+            <div class="chart-card"><h3>Monthly Total Trend ($)</h3><canvas id="momChart"></canvas></div>
+            <div class="chart-card">
+                <div class="controls">
+                    <h3>Year-over-Year</h3>
+                    <select id="yoyMetric" onchange="updateUI()">
+                        <option value="total">Total Bill ($)</option>
+                        <option value="elec">Electricity ($)</option>
+                        <option value="gas">Gas ($)</option>
+                        <option value="kwh">kWh Usage</option>
+                    </select>
+                </div>
+                <canvas id="yoyChart"></canvas>
+            </div>
+            <div class="chart-card"><h3>Elec vs Gas Split</h3><canvas id="splitChart"></canvas></div>
+            <div class="chart-card"><h3>YoY Savings % (Total Bill)</h3><canvas id="savingsChart"></canvas></div>
+        </div>
+    </div>
+
+    <div id="history" class="tab-content">
+        <div class="table-container">
+            <h3>Entry Logs</h3>
+            <table>
+                <thead><tr><th>Month</th><th>kWh</th><th>Elec $</th><th>Gas $</th><th>Total $</th><th>Actions</th></tr></thead>
+                <tbody id="tableBody"></tbody>
+            </table>
+        </div>
     </div>
 </div>
 
 <script>
-    // Pre-loaded data from your image
     let utilityData = [
         { month: '2023-11', total: 573.47, elec: 518.06, gas: 55.41, kwh: 1337 },
         { month: '2023-12', total: 852.80, elec: 793.33, gas: 59.47, kwh: 2032 },
@@ -90,11 +119,18 @@
 
     let charts = {};
 
+    function switchTab(tabId) {
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.getElementById(tabId).classList.add('active');
+        event.target.classList.add('active');
+    }
+
     function initCharts() {
-        charts.mom = new Chart(document.getElementById('momChart'), { type: 'line', data: { labels: [], datasets: [{ label: 'Total $', borderColor: '#2ecc71', data: [], tension: 0.1 }] } });
-        charts.kwh = new Chart(document.getElementById('kwhChart'), { type: 'bar', data: { labels: [], datasets: [{ label: 'kWh', backgroundColor: '#3498db', data: [] }] } });
+        charts.mom = new Chart(document.getElementById('momChart'), { type: 'line', data: { labels: [], datasets: [{ label: 'Total $', borderColor: '#2ecc71', data: [] }] } });
         charts.yoy = new Chart(document.getElementById('yoyChart'), { type: 'line', data: { labels: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'], datasets: [] }, options: { tension: 0.3 } });
-        charts.savings = new Chart(document.getElementById('savingsChart'), { type: 'bar', data: { labels: [], datasets: [{ label: '% Change vs Last Year', data: [] }] } });
+        charts.split = new Chart(document.getElementById('splitChart'), { type: 'bar', data: { labels: [], datasets: [{ label: 'Elec $', backgroundColor: '#f1c40f', data: [] }, { label: 'Gas $', backgroundColor: '#e67e22', data: [] }]}, options: { scales: { x: { stacked: true }, y: { stacked: true } } } });
+        charts.savings = new Chart(document.getElementById('savingsChart'), { type: 'bar', data: { labels: [], datasets: [{ label: '% Total Savings', data: [] }] } });
         updateUI();
     }
 
@@ -105,8 +141,7 @@
         const kwh = parseFloat(document.getElementById('kwh').value);
         const editIdx = parseInt(document.getElementById('editIndex').value);
 
-        if(!month || isNaN(total)) return alert("Please enter Month and Total Bill.");
-
+        if(!month || isNaN(total)) return alert("Check inputs");
         const entry = { month, total, elec, gas: Number((total-elec).toFixed(2)), kwh };
 
         if(editIdx > -1) utilityData[editIdx] = entry;
@@ -118,7 +153,7 @@
     }
 
     function deleteRow(index) {
-        if(confirm("Delete this entry?")) {
+        if(confirm("Permanently delete this row?")) {
             utilityData.splice(index, 1);
             updateUI();
         }
@@ -131,7 +166,7 @@
         document.getElementById('elecBill').value = d.elec;
         document.getElementById('kwh').value = d.kwh;
         document.getElementById('editIndex').value = index;
-        document.getElementById('saveBtn').innerText = "Update Entry";
+        document.getElementById('saveBtn').innerText = "Update Row";
         window.scrollTo(0,0);
     }
 
@@ -143,13 +178,17 @@
 
     function updateUI() {
         const labels = utilityData.map(d => d.month);
+        const metric = document.getElementById('yoyMetric').value;
+
+        // MoM & Split
         charts.mom.data.labels = labels;
         charts.mom.data.datasets[0].data = utilityData.map(d => d.total);
         charts.mom.update();
 
-        charts.kwh.data.labels = labels;
-        charts.kwh.data.datasets[0].data = utilityData.map(d => d.kwh);
-        charts.kwh.update();
+        charts.split.data.labels = labels;
+        charts.split.data.datasets[0].data = utilityData.map(d => d.elec);
+        charts.split.data.datasets[1].data = utilityData.map(d => d.gas);
+        charts.split.update();
 
         // YoY Logic
         const years = [...new Set(utilityData.map(d => d.month.split('-')[0]))];
@@ -160,20 +199,18 @@
             const yearArr = new Array(12).fill(null);
             utilityData.filter(d => d.month.startsWith(year)).forEach(d => {
                 const mIdx = parseInt(d.month.split('-')[1]) - 1;
-                yearArr[mIdx] = d.total;
+                yearArr[mIdx] = d[metric];
 
-                // Check for previous year same month
                 const prevYearMonth = `${parseInt(year)-1}-${d.month.split('-')[1]}`;
                 const prev = utilityData.find(pd => pd.month === prevYearMonth);
-                if(prev) {
-                    const diff = (((d.total - prev.total) / prev.total) * 100).toFixed(1);
-                    savingsData.push(diff);
+                if(prev && metric === 'total') {
+                    savingsData.push((((d.total - prev.total) / prev.total) * 100).toFixed(1));
                     savingsLabels.push(d.month);
                 }
             });
-            return { label: year, data: yearArr, borderColor: `hsl(${i * 100}, 70%, 50%)`, fill: false };
+            return { label: year, data: yearArr, borderColor: `hsl(${i * 120}, 70%, 50%)`, fill: false };
         });
-
+        
         charts.savings.data.labels = savingsLabels;
         charts.savings.data.datasets[0].data = savingsData;
         charts.savings.data.datasets[0].backgroundColor = savingsData.map(v => v < 0 ? '#27ae60' : '#e74c3c');
@@ -181,6 +218,7 @@
         charts.yoy.update();
         charts.savings.update();
 
+        // Historical Data Table
         document.getElementById('tableBody').innerHTML = utilityData.map((d, i) => `
             <tr>
                 <td>${d.month}</td><td>${d.kwh}</td><td>$${d.elec}</td><td>$${d.gas}</td><td>$${d.total}</td>
