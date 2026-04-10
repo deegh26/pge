@@ -13,14 +13,15 @@
         label { font-size: 0.8rem; font-weight: bold; color: #555; }
         input, button { padding: 10px; border: 1px solid #ccc; border-radius: 4px; width: 100%; box-sizing: border-box; }
         button { background-color: #007bff; color: white; cursor: pointer; border: none; font-weight: bold; }
-        button.edit-btn { background-color: #f39c12; padding: 5px; font-size: 0.8rem; }
+        .btn-edit { background-color: #f39c12; margin-right: 5px; width: auto; padding: 5px 10px; }
+        .btn-del { background-color: #e74c3c; width: auto; padding: 5px 10px; }
         .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 25px; margin-top: 20px; }
-        .chart-card { background: #fff; padding: 15px; border: 1px solid #eee; border-radius: 8px; position: relative; }
+        .chart-card { background: #fff; padding: 15px; border: 1px solid #eee; border-radius: 8px; min-height: 300px; }
         .table-container { margin-top: 30px; overflow-x: auto; }
         table { width: 100%; border-collapse: collapse; background: white; }
         th, td { padding: 12px; border: 1px solid #ddd; text-align: left; font-size: 0.9rem; }
         th { background: #f4f4f4; }
-        .savings-badge { position: absolute; top: 15px; right: 15px; background: #27ae60; color: white; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; }
+        @media (max-width: 800px) { .charts-grid { grid-template-columns: 1fr; } }
     </style>
 </head>
 <body>
@@ -28,7 +29,7 @@
 <div class="container">
     <h2>Utility Bill Visualizer</h2>
     
-    <div class="form-group" id="inputForm">
+    <div class="form-group">
         <input type="hidden" id="editIndex" value="-1">
         <div><label>Month/Year</label><input type="month" id="month"></div>
         <div><label>kWh Used</label><input type="number" id="kwh"></div>
@@ -38,14 +39,10 @@
     </div>
 
     <div class="charts-grid">
-        <div class="chart-card"><h3>Monthly Total Trend ($)</h3><canvas id="momChart"></canvas></div>
-        <div class="chart-card"><h3>Consumption (kWh)</h3><canvas id="kwhChart"></canvas></div>
+        <div class="chart-card"><h3>Monthly Trend ($)</h3><canvas id="momChart"></canvas></div>
+        <div class="chart-card"><h3>kWh Consumption</h3><canvas id="kwhChart"></canvas></div>
         <div class="chart-card"><h3>Year-over-Year Comparison</h3><canvas id="yoyChart"></canvas></div>
-        <div class="chart-card">
-            <h3>YoY Savings (%)</h3>
-            <p style="font-size: 0.8rem; color: #666;">Compared to same month last year (Negative = Savings)</p>
-            <canvas id="savingsChart"></canvas>
-        </div>
+        <div class="chart-card"><h3>YoY Savings (%)</h3><canvas id="savingsChart"></canvas></div>
     </div>
 
     <div class="table-container">
@@ -58,6 +55,7 @@
 </div>
 
 <script>
+    // Pre-loaded data from your image
     let utilityData = [
         { month: '2023-11', total: 573.47, elec: 518.06, gas: 55.41, kwh: 1337 },
         { month: '2023-12', total: 852.80, elec: 793.33, gas: 59.47, kwh: 2032 },
@@ -93,14 +91,10 @@
     let charts = {};
 
     function initCharts() {
-        charts.mom = new Chart(document.getElementById('momChart'), { type: 'line', data: { labels: [], datasets: [{ label: 'Total $', borderColor: '#2ecc71', data: [] }] } });
+        charts.mom = new Chart(document.getElementById('momChart'), { type: 'line', data: { labels: [], datasets: [{ label: 'Total $', borderColor: '#2ecc71', data: [], tension: 0.1 }] } });
         charts.kwh = new Chart(document.getElementById('kwhChart'), { type: 'bar', data: { labels: [], datasets: [{ label: 'kWh', backgroundColor: '#3498db', data: [] }] } });
-        charts.yoy = new Chart(document.getElementById('yoyChart'), { type: 'line', data: { labels: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'], datasets: [] } });
-        charts.savings = new Chart(document.getElementById('savingsChart'), { 
-            type: 'bar', 
-            data: { labels: [], datasets: [{ label: '% Change YoY', backgroundColor: '#e74c3c', data: [] }] },
-            options: { plugins: { tooltip: { callbacks: { label: (c) => c.raw + '%' } } } }
-        });
+        charts.yoy = new Chart(document.getElementById('yoyChart'), { type: 'line', data: { labels: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'], datasets: [] }, options: { tension: 0.3 } });
+        charts.savings = new Chart(document.getElementById('savingsChart'), { type: 'bar', data: { labels: [], datasets: [{ label: '% Change vs Last Year', data: [] }] } });
         updateUI();
     }
 
@@ -111,16 +105,23 @@
         const kwh = parseFloat(document.getElementById('kwh').value);
         const editIdx = parseInt(document.getElementById('editIndex').value);
 
-        if(!month || isNaN(total)) return alert("Fill Month and Total");
+        if(!month || isNaN(total)) return alert("Please enter Month and Total Bill.");
 
-        const newData = { month, total, elec, gas: Number((total-elec).toFixed(2)), kwh };
+        const entry = { month, total, elec, gas: Number((total-elec).toFixed(2)), kwh };
 
-        if(editIdx > -1) utilityData[editIdx] = newData;
-        else utilityData.push(newData);
+        if(editIdx > -1) utilityData[editIdx] = entry;
+        else utilityData.push(entry);
 
         utilityData.sort((a,b) => new Date(a.month) - new Date(b.month));
         resetForm();
         updateUI();
+    }
+
+    function deleteRow(index) {
+        if(confirm("Delete this entry?")) {
+            utilityData.splice(index, 1);
+            updateUI();
+        }
     }
 
     function editRow(index) {
@@ -130,7 +131,7 @@
         document.getElementById('elecBill').value = d.elec;
         document.getElementById('kwh').value = d.kwh;
         document.getElementById('editIndex').value = index;
-        document.getElementById('saveBtn').innerText = "Update Row";
+        document.getElementById('saveBtn').innerText = "Update Entry";
         window.scrollTo(0,0);
     }
 
@@ -150,7 +151,7 @@
         charts.kwh.data.datasets[0].data = utilityData.map(d => d.kwh);
         charts.kwh.update();
 
-        // YoY and Savings Logic
+        // YoY Logic
         const years = [...new Set(utilityData.map(d => d.month.split('-')[0]))];
         const savingsData = [];
         const savingsLabels = [];
@@ -160,35 +161,33 @@
             utilityData.filter(d => d.month.startsWith(year)).forEach(d => {
                 const mIdx = parseInt(d.month.split('-')[1]) - 1;
                 yearArr[mIdx] = d.total;
-                
-                // Calculate Savings vs Previous Year
+
+                // Check for previous year same month
                 const prevYearMonth = `${parseInt(year)-1}-${d.month.split('-')[1]}`;
-                const prevData = utilityData.find(pd => pd.month === prevYearMonth);
-                if(prevData) {
-                    const pct = (((d.total - prevData.total) / prevData.total) * 100).toFixed(1);
-                    savingsData.push(pct);
+                const prev = utilityData.find(pd => pd.month === prevYearMonth);
+                if(prev) {
+                    const diff = (((d.total - prev.total) / prev.total) * 100).toFixed(1);
+                    savingsData.push(diff);
                     savingsLabels.push(d.month);
                 }
             });
-            return { label: year, data: yearArr, borderColor: `hsl(${i * 90}, 70%, 50%)`, fill: false };
+            return { label: year, data: yearArr, borderColor: `hsl(${i * 100}, 70%, 50%)`, fill: false };
         });
-        
+
         charts.savings.data.labels = savingsLabels;
         charts.savings.data.datasets[0].data = savingsData;
         charts.savings.data.datasets[0].backgroundColor = savingsData.map(v => v < 0 ? '#27ae60' : '#e74c3c');
+        
         charts.yoy.update();
         charts.savings.update();
 
-        // Table
-        const tbody = document.getElementById('tableBody');
-        tbody.innerHTML = utilityData.map((d, i) => `
+        document.getElementById('tableBody').innerHTML = utilityData.map((d, i) => `
             <tr>
-                <td>${d.month}</td>
-                <td>${d.kwh}</td>
-                <td>$${d.elec}</td>
-                <td>$${d.gas}</td>
-                <td>$${d.total}</td>
-                <td><button class="edit-btn" onclick="editRow(${i})">Edit</button></td>
+                <td>${d.month}</td><td>${d.kwh}</td><td>$${d.elec}</td><td>$${d.gas}</td><td>$${d.total}</td>
+                <td>
+                    <button class="btn-edit" onclick="editRow(${i})">Edit</button>
+                    <button class="btn-del" onclick="deleteRow(${i})">Del</button>
+                </td>
             </tr>
         `).reverse().join('');
     }
