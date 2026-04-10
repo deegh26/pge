@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Utility Bill Visualizer Pro</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; margin: 20px; background-color: #f0f2f5; color: #333; }
+        .container { max-width: 1200px; margin: auto; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        h2, h3 { color: #2c3e50; margin-top: 0; }
+        .form-group { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin-bottom: 25px; padding: 20px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; }
+        label { font-size: 0.8rem; font-weight: bold; color: #555; }
+        input, button { padding: 10px; border: 1px solid #ccc; border-radius: 4px; width: 100%; box-sizing: border-box; }
+        button { background-color: #007bff; color: white; cursor: pointer; border: none; font-weight: bold; }
+        button.edit-btn { background-color: #f39c12; padding: 5px; font-size: 0.8rem; }
+        .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 25px; margin-top: 20px; }
+        .chart-card { background: #fff; padding: 15px; border: 1px solid #eee; border-radius: 8px; position: relative; }
+        .table-container { margin-top: 30px; overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; background: white; }
+        th, td { padding: 12px; border: 1px solid #ddd; text-align: left; font-size: 0.9rem; }
+        th { background: #f4f4f4; }
+        .savings-badge { position: absolute; top: 15px; right: 15px; background: #27ae60; color: white; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Utility Bill Visualizer</h2>
+    
+    <div class="form-group" id="inputForm">
+        <input type="hidden" id="editIndex" value="-1">
+        <div><label>Month/Year</label><input type="month" id="month"></div>
+        <div><label>kWh Used</label><input type="number" id="kwh"></div>
+        <div><label>Elec. Bill ($)</label><input type="number" step="0.01" id="elecBill"></div>
+        <div><label>Total Bill ($)</label><input type="number" step="0.01" id="totalBill"></div>
+        <div style="align-self: end;"><button onclick="saveData()" id="saveBtn">Add Data</button></div>
+    </div>
+
+    <div class="charts-grid">
+        <div class="chart-card"><h3>Monthly Total Trend ($)</h3><canvas id="momChart"></canvas></div>
+        <div class="chart-card"><h3>Consumption (kWh)</h3><canvas id="kwhChart"></canvas></div>
+        <div class="chart-card"><h3>Year-over-Year Comparison</h3><canvas id="yoyChart"></canvas></div>
+        <div class="chart-card">
+            <h3>YoY Savings (%)</h3>
+            <p style="font-size: 0.8rem; color: #666;">Compared to same month last year (Negative = Savings)</p>
+            <canvas id="savingsChart"></canvas>
+        </div>
+    </div>
+
+    <div class="table-container">
+        <h3>Historical Logs</h3>
+        <table id="dataTable">
+            <thead><tr><th>Month</th><th>kWh</th><th>Elec $</th><th>Gas $</th><th>Total $</th><th>Actions</th></tr></thead>
+            <tbody id="tableBody"></tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    let utilityData = [
+        { month: '2023-11', total: 573.47, elec: 518.06, gas: 55.41, kwh: 1337 },
+        { month: '2023-12', total: 852.80, elec: 793.33, gas: 59.47, kwh: 2032 },
+        { month: '2024-01', total: 961.57, elec: 889.69, gas: 71.88, kwh: 1952 },
+        { month: '2024-02', total: 1067.74, elec: 994.63, gas: 73.11, kwh: 2185 },
+        { month: '2024-03', total: 626.21, elec: 565.15, gas: 61.06, kwh: 1546 },
+        { month: '2024-04', total: 666.33, elec: 594.66, gas: 71.67, kwh: 1283 },
+        { month: '2024-05', total: 527.66, elec: 466.29, gas: 61.37, kwh: 1004 },
+        { month: '2024-06', total: 607.32, elec: 556.27, gas: 51.05, kwh: 1169 },
+        { month: '2024-07', total: 760.40, elec: 711.45, gas: 48.95, kwh: 1634 },
+        { month: '2024-08', total: 600.87, elec: 551.88, gas: 48.99, kwh: 1266 },
+        { month: '2024-09', total: 594.06, elec: 542.23, gas: 51.83, kwh: 1585 },
+        { month: '2024-10', total: 547.08, elec: 495.20, gas: 51.88, kwh: 1358 },
+        { month: '2024-11', total: 750.28, elec: 694.31, gas: 55.97, kwh: 1921 },
+        { month: '2024-12', total: 733.47, elec: 672.15, gas: 61.32, kwh: 1826 },
+        { month: '2025-01', total: 874.68, elec: 801.94, gas: 72.74, kwh: 2334 },
+        { month: '2025-02', total: 855.84, elec: 781.61, gas: 74.23, kwh: 2285 },
+        { month: '2025-03', total: 619.99, elec: 551.13, gas: 68.86, kwh: 1950 },
+        { month: '2025-04', total: 574.33, elec: 505.40, gas: 68.93, kwh: 1493 },
+        { month: '2025-05', total: 466.97, elec: 382.86, gas: 84.11, kwh: 1134 },
+        { month: '2025-06', total: 315.03, elec: 218.07, gas: 96.96, kwh: 710 },
+        { month: '2025-07', total: 292.81, elec: 209.85, gas: 82.96, kwh: 671 },
+        { month: '2025-08', total: 277.50, elec: 191.88, gas: 85.62, kwh: 571 },
+        { month: '2025-09', total: 117.06, elec: 52.55, gas: 64.51, kwh: 516 },
+        { month: '2025-10', total: 124.59, elec: 65.63, gas: 58.96, kwh: 537 },
+        { month: '2025-11', total: 437.36, elec: 366.98, gas: 70.38, kwh: 1195 },
+        { month: '2025-12', total: 449.87, elec: 377.51, gas: 72.36, kwh: 1084 },
+        { month: '2026-01', total: 609.34, elec: 538.20, gas: 71.14, kwh: 1660 },
+        { month: '2026-02', total: 370.34, elec: 289.09, gas: 81.25, kwh: 888 },
+        { month: '2026-03', total: 70.04, elec: 47.02, gas: 23.02, kwh: 100.13 }
+    ];
+
+    let charts = {};
+
+    function initCharts() {
+        charts.mom = new Chart(document.getElementById('momChart'), { type: 'line', data: { labels: [], datasets: [{ label: 'Total $', borderColor: '#2ecc71', data: [] }] } });
+        charts.kwh = new Chart(document.getElementById('kwhChart'), { type: 'bar', data: { labels: [], datasets: [{ label: 'kWh', backgroundColor: '#3498db', data: [] }] } });
+        charts.yoy = new Chart(document.getElementById('yoyChart'), { type: 'line', data: { labels: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'], datasets: [] } });
+        charts.savings = new Chart(document.getElementById('savingsChart'), { 
+            type: 'bar', 
+            data: { labels: [], datasets: [{ label: '% Change YoY', backgroundColor: '#e74c3c', data: [] }] },
+            options: { plugins: { tooltip: { callbacks: { label: (c) => c.raw + '%' } } } }
+        });
+        updateUI();
+    }
+
+    function saveData() {
+        const month = document.getElementById('month').value;
+        const total = parseFloat(document.getElementById('totalBill').value);
+        const elec = parseFloat(document.getElementById('elecBill').value);
+        const kwh = parseFloat(document.getElementById('kwh').value);
+        const editIdx = parseInt(document.getElementById('editIndex').value);
+
+        if(!month || isNaN(total)) return alert("Fill Month and Total");
+
+        const newData = { month, total, elec, gas: Number((total-elec).toFixed(2)), kwh };
+
+        if(editIdx > -1) utilityData[editIdx] = newData;
+        else utilityData.push(newData);
+
+        utilityData.sort((a,b) => new Date(a.month) - new Date(b.month));
+        resetForm();
+        updateUI();
+    }
+
+    function editRow(index) {
+        const d = utilityData[index];
+        document.getElementById('month').value = d.month;
+        document.getElementById('totalBill').value = d.total;
+        document.getElementById('elecBill').value = d.elec;
+        document.getElementById('kwh').value = d.kwh;
+        document.getElementById('editIndex').value = index;
+        document.getElementById('saveBtn').innerText = "Update Row";
+        window.scrollTo(0,0);
+    }
+
+    function resetForm() {
+        document.getElementById('editIndex').value = -1;
+        document.getElementById('saveBtn').innerText = "Add Data";
+        ['month','totalBill','elecBill','kwh'].forEach(id => document.getElementById(id).value = '');
+    }
+
+    function updateUI() {
+        const labels = utilityData.map(d => d.month);
+        charts.mom.data.labels = labels;
+        charts.mom.data.datasets[0].data = utilityData.map(d => d.total);
+        charts.mom.update();
+
+        charts.kwh.data.labels = labels;
+        charts.kwh.data.datasets[0].data = utilityData.map(d => d.kwh);
+        charts.kwh.update();
+
+        // YoY and Savings Logic
+        const years = [...new Set(utilityData.map(d => d.month.split('-')[0]))];
+        const savingsData = [];
+        const savingsLabels = [];
+
+        charts.yoy.data.datasets = years.map((year, i) => {
+            const yearArr = new Array(12).fill(null);
+            utilityData.filter(d => d.month.startsWith(year)).forEach(d => {
+                const mIdx = parseInt(d.month.split('-')[1]) - 1;
+                yearArr[mIdx] = d.total;
+                
+                // Calculate Savings vs Previous Year
+                const prevYearMonth = `${parseInt(year)-1}-${d.month.split('-')[1]}`;
+                const prevData = utilityData.find(pd => pd.month === prevYearMonth);
+                if(prevData) {
+                    const pct = (((d.total - prevData.total) / prevData.total) * 100).toFixed(1);
+                    savingsData.push(pct);
+                    savingsLabels.push(d.month);
+                }
+            });
+            return { label: year, data: yearArr, borderColor: `hsl(${i * 90}, 70%, 50%)`, fill: false };
+        });
+        
+        charts.savings.data.labels = savingsLabels;
+        charts.savings.data.datasets[0].data = savingsData;
+        charts.savings.data.datasets[0].backgroundColor = savingsData.map(v => v < 0 ? '#27ae60' : '#e74c3c');
+        charts.yoy.update();
+        charts.savings.update();
+
+        // Table
+        const tbody = document.getElementById('tableBody');
+        tbody.innerHTML = utilityData.map((d, i) => `
+            <tr>
+                <td>${d.month}</td>
+                <td>${d.kwh}</td>
+                <td>$${d.elec}</td>
+                <td>$${d.gas}</td>
+                <td>$${d.total}</td>
+                <td><button class="edit-btn" onclick="editRow(${i})">Edit</button></td>
+            </tr>
+        `).reverse().join('');
+    }
+
+    window.onload = initCharts;
+</script>
+</body>
+</html>
